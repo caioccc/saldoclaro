@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useId, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
-import type { MonthProjection } from "@/types";
+import { BarChart3, ChevronDown, Table2 } from "lucide-react";
+import type { DebtItem, FeeTable, MonthProjection } from "@/types";
 import { currentMonthKey, formatMonthYear } from "@/utils/date";
 import { formatBRL } from "@/utils/format";
 import { MonthCard } from "@/components/MonthCard";
+import { DebtTimelineGantt } from "@/components/DebtTimelineGantt";
 
 interface MonthsGridProps {
   months: MonthProjection[];
   startMonth: string;
+  debts: DebtItem[];
+  fees: FeeTable;
   onDebtSelect: (debtId: string, installmentNumber: number) => void;
+  onDebtToggle: (debtId: string, active: boolean) => void;
 }
 
 interface YearGroup {
@@ -22,12 +26,20 @@ interface YearGroup {
   remaining: number;
 }
 
-export function MonthsGrid({ months, startMonth, onDebtSelect }: MonthsGridProps) {
+export function MonthsGrid({
+  months,
+  startMonth,
+  debts,
+  fees,
+  onDebtSelect,
+  onDebtToggle,
+}: MonthsGridProps) {
   const current = currentMonthKey();
   const idPrefix = useId();
   const [closedYears, setClosedYears] = useState<Record<string, boolean>>({});
   const [hoveredDebtId, setHoveredDebtId] = useState<string | null>(null);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
+  const [view, setView] = useState<"cards" | "timeline">("cards");
   const highlightedDebtId = hoveredDebtId ?? selectedDebtId;
 
   const yearGroups = useMemo<YearGroup[]>(() => {
@@ -80,7 +92,34 @@ export function MonthsGrid({ months, startMonth, onDebtSelect }: MonthsGridProps
             Passe o mouse ou clique em uma parcela para destacar a mesma dívida em todos os meses.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950/50">
+            <button
+              type="button"
+              onClick={() => setView("cards")}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition ${
+                view === "cards"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <Table2 className="size-3.5" />
+              Cards anuais
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("timeline")}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition ${
+                view === "timeline"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <BarChart3 className="size-3.5" />
+              Timeline
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-emerald-500" />
             Livre &gt; 50%
@@ -93,9 +132,19 @@ export function MonthsGrid({ months, startMonth, onDebtSelect }: MonthsGridProps
             <span className="size-2 rounded-full bg-red-500" />
             Crítico &lt; 20%
           </span>
+          </div>
         </div>
       </div>
 
+      {view === "timeline" ? (
+        <DebtTimelineGantt
+          months={months}
+          debts={debts}
+          fees={fees}
+          onDebtSelect={onDebtSelect}
+          onDebtToggle={onDebtToggle}
+        />
+      ) : (
       <div className="space-y-5">
         {yearGroups.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -213,6 +262,7 @@ export function MonthsGrid({ months, startMonth, onDebtSelect }: MonthsGridProps
           );
         })}
       </div>
+      )}
     </section>
   );
 }

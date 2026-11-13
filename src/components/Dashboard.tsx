@@ -602,7 +602,10 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
                 key={simulation.id}
                 months={months}
                 startMonth={activeStartMonth}
+                debts={simulation.debts}
+                fees={app.fees}
                 onDebtSelect={handleDebtSelect}
+                onDebtToggle={handleToggleDebt}
               />
             </div>
 
