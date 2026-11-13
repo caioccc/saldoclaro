@@ -57,7 +57,7 @@ export function duplicateSimulation(simulation: Simulation): Simulation {
   };
 }
 
-function normalizeFeeTable(value: unknown): FeeTable {
+export function normalizeFeeTable(value: unknown): FeeTable {
   const fees = createDefaultFees();
   if (!value || typeof value !== "object") return fees;
 

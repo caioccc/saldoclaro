@@ -9,14 +9,27 @@ datasource db {
 
 model Simulation {
   id            String        @id
+  ownerId       String?
   name          String
   createdAt     DateTime
   startMonth    String
   horizonMonths Int?
   budgets       MonthBudget[]
   debts         DebtItem[]
+  owner         User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  @@index([ownerId])
   @@map("Simulation")
+}
+
+model User {
+  id           String       @id
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime
+  simulations  Simulation[]
+
+  @@map("User")
 }
 
 model MonthBudget {

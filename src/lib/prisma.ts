@@ -21,13 +21,26 @@ export function ensureDatabaseSchema(): Promise<void> {
     schemaPromise = prisma
       .$transaction(async (transaction) => {
         await transaction.$executeRawUnsafe(`
+          CREATE TABLE IF NOT EXISTS "User" (
+            "id" TEXT PRIMARY KEY,
+            "email" TEXT NOT NULL UNIQUE,
+            "passwordHash" TEXT NOT NULL,
+            "createdAt" TIMESTAMP(3) NOT NULL
+          )
+        `);
+        await transaction.$executeRawUnsafe(`
           CREATE TABLE IF NOT EXISTS "Simulation" (
             "id" TEXT PRIMARY KEY,
+            "ownerId" TEXT,
             "name" TEXT NOT NULL,
             "createdAt" TIMESTAMP(3) NOT NULL,
             "startMonth" TEXT NOT NULL,
             "horizonMonths" INTEGER
           )
+        `);
+        await transaction.$executeRawUnsafe(`
+          ALTER TABLE "Simulation"
+          ADD COLUMN IF NOT EXISTS "ownerId" TEXT
         `);
         await transaction.$executeRawUnsafe(`
           CREATE TABLE IF NOT EXISTS "MonthBudget" (

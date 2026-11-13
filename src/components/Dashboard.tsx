@@ -676,7 +676,7 @@ export default function Dashboard() {
     { deserialize: deserializeAppState },
   );
 
-  useDatabaseSync(app, hydrated);
+  useDatabaseSync(app, hydrated, setApp);
 
   if (!hydrated || !app) return <DashboardSkeleton />;
 
