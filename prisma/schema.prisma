@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Simulation {
+  id            String        @id
+  name          String
+  createdAt     DateTime
+  startMonth    String
+  horizonMonths Int?
+  budgets       MonthBudget[]
+  debts         DebtItem[]
+
+  @@map("Simulation")
+}
+
+model MonthBudget {
+  id           String     @id @default(cuid())
+  simulationId String
+  month        Int
+  year         Int
+  initialValue Decimal    @db.Decimal(14, 2)
+  simulation   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@unique([simulationId, year, month])
+  @@index([simulationId])
+  @@map("MonthBudget")
+}
+
+model DebtItem {
+  id                    String     @id
+  simulationId          String
+  name                  String
+  netAmount             Decimal    @db.Decimal(14, 2)
+  installments          Int
+  startMonth            String
+  creditInPreviousMonth Boolean    @default(false)
+  creditMonth           String?
+  active                Boolean    @default(true)
+  createdAt             DateTime
+  simulation            Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@index([simulationId])
+  @@map("DebtItem")
+}
+
+model AppSettings {
+  id        String   @id
+  fees      Json
+  updatedAt DateTime @updatedAt
+
+  @@map("AppSettings")
+}
