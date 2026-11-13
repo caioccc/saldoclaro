@@ -5,6 +5,7 @@ import type { AppState, Simulation } from "@/types";
 import { parseAppState } from "@/lib/storage";
 
 type SetAppState = (updater: AppState | ((previous: AppState) => AppState)) => void;
+const DATABASE_MIGRATION_KEY = "capacidade-credito:database-migration:v1";
 
 function isEmptyDefaultSimulation(simulation: Simulation): boolean {
   return (
@@ -14,29 +15,37 @@ function isEmptyDefaultSimulation(simulation: Simulation): boolean {
   );
 }
 
-function mergeAppStates(local: AppState, remote: AppState): AppState {
+function mergeAppStates(local: AppState, remote: AppState, preferLocal: boolean): AppState {
   const localIsPlaceholder =
     local.simulations.length === 1 && isEmptyDefaultSimulation(local.simulations[0]);
   const simulations = new Map(remote.simulations.map((simulation) => [simulation.id, simulation]));
 
   if (!localIsPlaceholder) {
     for (const simulation of local.simulations) {
-      simulations.set(simulation.id, simulation);
+      if (preferLocal || !simulations.has(simulation.id)) {
+        simulations.set(simulation.id, simulation);
+      }
     }
   }
 
   const mergedSimulations = Array.from(simulations.values());
-  const activeSimulationId = mergedSimulations.some(
+  const fallbackActiveSimulationId = mergedSimulations[0]?.id ?? "";
+  const localActiveSimulationId = mergedSimulations.some(
     (simulation) => simulation.id === local.activeSimulationId,
   )
     ? local.activeSimulationId
-    : mergedSimulations[0]?.id ?? "";
+    : fallbackActiveSimulationId;
+  const remoteActiveSimulationId = mergedSimulations.some(
+    (simulation) => simulation.id === remote.activeSimulationId,
+  )
+    ? remote.activeSimulationId
+    : fallbackActiveSimulationId;
 
   return {
     version: 1,
     simulations: mergedSimulations,
-    activeSimulationId,
-    fees: local.fees,
+    activeSimulationId: preferLocal ? localActiveSimulationId : remoteActiveSimulationId,
+    fees: preferLocal ? local.fees : remote.fees,
   };
 }
 
@@ -46,6 +55,8 @@ export function useDatabaseSync(
   setValue: SetAppState,
 ) {
   const initialized = useRef(false);
+  const skipSyncSignature = useRef<string | null>(null);
+  const initialSyncPayload = useRef<AppState | null>(null);
   const [databaseReady, setDatabaseReady] = useState(false);
 
   useEffect(() => {
@@ -63,7 +74,13 @@ export function useDatabaseSync(
 
         const remote = parseAppState(await response.json());
         if (remote) {
-          const merged = mergeAppStates(app, remote);
+          const migrationCompleted =
+            window.localStorage.getItem(DATABASE_MIGRATION_KEY) === "true";
+          const merged = mergeAppStates(app, remote, !migrationCompleted);
+          if (!migrationCompleted) {
+            initialSyncPayload.current = merged;
+          }
+          skipSyncSignature.current = JSON.stringify(app);
           setDatabaseReady(true);
           if (JSON.stringify(merged) !== JSON.stringify(app)) {
             setValue(merged);
@@ -83,12 +100,18 @@ export function useDatabaseSync(
 
   useEffect(() => {
     if (!databaseReady || !app) return;
+    const appSignature = JSON.stringify(app);
+    if (skipSyncSignature.current === appSignature && !initialSyncPayload.current) {
+      skipSyncSignature.current = null;
+      return;
+    }
     const controller = new AbortController();
+    const payload = initialSyncPayload.current ?? app;
 
     void fetch("/api/sync-local-data", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(app),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -97,6 +120,10 @@ export function useDatabaseSync(
             | { error?: string }
             | null;
           throw new Error(result?.error ?? "A sincronização com o banco falhou.");
+        }
+        if (initialSyncPayload.current) {
+          window.localStorage.setItem(DATABASE_MIGRATION_KEY, "true");
+          initialSyncPayload.current = null;
         }
       })
       .catch((error: unknown) => {

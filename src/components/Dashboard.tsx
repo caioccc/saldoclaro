@@ -455,7 +455,7 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
                   <span className="text-zinc-300 dark:text-zinc-700">·</span>
                   <span className="inline-flex items-center gap-1">
                     <Database className="size-3.5" />
-                    Salvo localmente
+                    Persistido no banco
                   </span>
                 </p>
               </div>
@@ -615,7 +615,7 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
               </p>
               <p className="inline-flex items-center gap-1.5">
                 <Database className="size-3" />
-                Persistência local via localStorage · nenhum dado sai do seu dispositivo
+                Neon PostgreSQL como fonte de verdade · localStorage usado apenas como cache de segurança
               </p>
             </footer>
           </main>

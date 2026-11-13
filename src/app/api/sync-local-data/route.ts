@@ -94,6 +94,15 @@ export async function POST(request: Request) {
         data: { ownerId: user.id },
       });
 
+      await transaction.simulation.deleteMany({
+        where: {
+          ownerId: user.id,
+          ...(app.simulations.length > 0
+            ? { id: { notIn: app.simulations.map((simulation) => simulation.id) } }
+            : {}),
+        },
+      });
+
       for (const simulation of app.simulations) {
         const existing = await transaction.simulation.findUnique({
           where: { id: simulation.id },
