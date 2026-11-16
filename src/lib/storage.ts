@@ -10,9 +10,14 @@ import {
   normalizeInstallments,
 } from "@/utils/finance";
 import { createId } from "@/utils/id";
+import {
+  PREPOPULATED_START_MONTH,
+  budgetToMonthKey,
+  generatePrepopulatedBudgets,
+  referenceMonthToOperationalMonthKey,
+} from "@/utils/prepopulate";
 
-export const STORAGE_KEY = "capacidade-credito:app:v1";
-export const THEME_KEY = "capacidade-credito:theme";
+export const THEME_COOKIE_NAME = "saldoclaro_theme";
 
 export function createDefaultFees(): FeeTable {
   return { ...DEFAULT_MERCADO_PAGO_FEES };
@@ -54,6 +59,22 @@ export function duplicateSimulation(simulation: Simulation): Simulation {
       id: createId("debt"),
       createdAt: new Date().toISOString(),
     })),
+  };
+}
+
+export function createPrepopulatedSimulation(name: string): Simulation {
+  const budgets = generatePrepopulatedBudgets();
+  const budgetRecord: Record<string, number> = {};
+
+  for (const budget of budgets) {
+    const referenceMonth = budgetToMonthKey(budget);
+    budgetRecord[referenceMonthToOperationalMonthKey(referenceMonth)] = budget.sobraInicial;
+  }
+
+  return {
+    ...createSimulation(name, PREPOPULATED_START_MONTH),
+    horizonMonths: budgets.length,
+    budgets: budgetRecord,
   };
 }
 
@@ -167,10 +188,4 @@ export function parseAppState(value: unknown): AppState | null {
   };
 }
 
-export function deserializeAppState(raw: string): AppState | null {
-  try {
-    return parseAppState(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
+

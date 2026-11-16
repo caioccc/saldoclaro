@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Copy,
   Database,
+  Pencil,
   Plus,
   Settings2,
   Trash2,
@@ -17,6 +18,7 @@ interface SidebarProps {
   simulations: Simulation[];
   activeSimulationId: string;
   onSelect: (id: string) => void;
+  onRename: (id: string) => void;
   onNew: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -27,6 +29,7 @@ export function Sidebar({
   simulations,
   activeSimulationId,
   onSelect,
+  onRename,
   onNew,
   onDuplicate,
   onDelete,
@@ -71,46 +74,56 @@ export function Sidebar({
           {simulations.map((simulation) => {
             const isActive = simulation.id === activeSimulationId;
             return (
-              <button
-                key={simulation.id}
-                type="button"
-                onClick={() => onSelect(simulation.id)}
-                className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${
-                  isActive
-                    ? "border-emerald-200 bg-emerald-50/80 shadow-sm dark:border-emerald-500/25 dark:bg-emerald-500/10"
-                    : "border-transparent hover:border-zinc-200 hover:bg-zinc-50 dark:hover:border-zinc-800 dark:hover:bg-zinc-900"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-1.5 shrink-0 rounded-full ${
-                      isActive
-                        ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
-                        : "bg-zinc-300 dark:bg-zinc-700"
-                    }`}
-                  />
-                  <span
-                    className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${
-                      isActive
-                        ? "text-emerald-950 dark:text-emerald-50"
-                        : "text-zinc-700 dark:text-zinc-300"
-                    }`}
-                  >
-                    {simulation.name}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex items-center gap-2 pl-3.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                  <span className="inline-flex items-center gap-1">
-                    <CalendarDays className="size-3" />
-                    {formatDateTimeBR(simulation.createdAt)}
-                  </span>
-                  <span className="text-zinc-300 dark:text-zinc-700">·</span>
-                  <span>{formatShortMonthYear(simulation.startMonth)}</span>
-                </div>
-                <div className="mt-1 pl-3.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {simulation.debts.length} {simulation.debts.length === 1 ? "dívida" : "dívidas"}
-                </div>
-              </button>
+              <div key={simulation.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onSelect(simulation.id)}
+                  className={`w-full rounded-xl border py-2.5 pl-3 pr-9 text-left transition ${
+                    isActive
+                      ? "border-emerald-200 bg-emerald-50/80 shadow-sm dark:border-emerald-500/25 dark:bg-emerald-500/10"
+                      : "border-transparent hover:border-zinc-200 hover:bg-zinc-50 dark:hover:border-zinc-800 dark:hover:bg-zinc-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`size-1.5 shrink-0 rounded-full ${
+                        isActive
+                          ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
+                          : "bg-zinc-300 dark:bg-zinc-700"
+                      }`}
+                    />
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${
+                        isActive
+                          ? "text-emerald-950 dark:text-emerald-50"
+                          : "text-zinc-700 dark:text-zinc-300"
+                      }`}
+                    >
+                      {simulation.name}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2 pl-3.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarDays className="size-3" />
+                      {formatDateTimeBR(simulation.createdAt)}
+                    </span>
+                    <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                    <span>{formatShortMonthYear(simulation.startMonth)}</span>
+                  </div>
+                  <div className="mt-1 pl-3.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {simulation.debts.length} {simulation.debts.length === 1 ? "dívida" : "dívidas"}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRename(simulation.id)}
+                  aria-label={`Editar título de ${simulation.name}`}
+                  title="Editar título"
+                  className="absolute right-2 top-2 grid size-7 place-items-center rounded-lg text-zinc-400 opacity-0 transition hover:bg-zinc-200/70 hover:text-zinc-700 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-zinc-700/60 dark:hover:text-zinc-200"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              </div>
             );
           })}
         </nav>

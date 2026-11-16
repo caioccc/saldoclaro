@@ -174,7 +174,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, syncedAt: new Date().toISOString() });
   } catch (error) {
-    console.error("Falha ao sincronizar dados locais com o banco.", error);
+    console.error("Falha ao salvar os dados no banco.", error);
     return NextResponse.json(
       { error: "Não foi possível salvar os dados no banco." },
       { status: 500 },

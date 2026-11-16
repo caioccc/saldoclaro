@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
 };
 
-const themeScript = `(function(){try{var stored=localStorage.getItem('capacidade-credito:theme');var dark=stored?stored==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',dark);}catch(e){}})();`;
+const themeScript = `(function(){try{var match=document.cookie.match(/(?:^|; )saldoclaro_theme=([^;]+)/);var stored=match?decodeURIComponent(match[1]):null;var dark=stored?stored==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',dark);}catch(e){}})();`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

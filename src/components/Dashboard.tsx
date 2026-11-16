@@ -10,6 +10,7 @@ import {
   Copy,
   Database,
   Info,
+  Pencil,
   Percent,
   PiggyBank,
   Plus,
@@ -36,21 +37,18 @@ import {
 import { formatBRL, formatPercent } from "@/utils/format";
 import { createId } from "@/utils/id";
 import {
-  STORAGE_KEY,
-  createDefaultAppState,
+  createPrepopulatedSimulation,
   createSimulation,
-  deserializeAppState,
   duplicateSimulation,
 } from "@/lib/storage";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
-import { usePrepopulatedSimulation } from "@/hooks/usePrepopulatedSimulation";
-import { useDatabaseSync } from "@/hooks/useDatabaseSync";
+import { useDatabaseState } from "@/hooks/useDatabaseState";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BudgetPanel } from "@/components/BudgetPanel";
 import { DebtForm } from "@/components/DebtForm";
 import { DebtList } from "@/components/DebtList";
 import { MonthsGrid } from "@/components/MonthsGrid";
 import { NewSimulationDialog } from "@/components/dialogs/NewSimulationDialog";
+import { RenameSimulationDialog } from "@/components/dialogs/RenameSimulationDialog";
 import { FeesDialog } from "@/components/dialogs/FeesDialog";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { DebtDetailsDialog } from "@/components/dialogs/DebtDetailsDialog";
@@ -157,10 +155,13 @@ function DashboardSkeleton() {
 interface DashboardContentProps {
   app: AppState;
   setApp: SetAppState;
+  saving: boolean;
+  syncError: string | null;
 }
 
-function DashboardContent({ app, setApp }: DashboardContentProps) {
+function DashboardContent({ app, setApp, saving, syncError }: DashboardContentProps) {
   const [newSimulationOpen, setNewSimulationOpen] = useState(false);
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [feesOpen, setFeesOpen] = useState(false);
   const [deleteSimulationOpen, setDeleteSimulationOpen] = useState(false);
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
@@ -169,7 +170,6 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
     debtId: string;
     installmentNumber: number;
   } | null>(null);
-  const { createSimulationFromTableData } = usePrepopulatedSimulation();
 
   const simulation =
     app.simulations.find((item) => item.id === app.activeSimulationId) ?? app.simulations[0];
@@ -217,6 +217,8 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
   const editingDebt = simulation.debts.find((debt) => debt.id === editingDebtId) ?? null;
   const selectedDebtItem =
     simulation.debts.find((debt) => debt.id === selectedDebt?.debtId) ?? null;
+  const renameTarget =
+    app.simulations.find((item) => item.id === renameTargetId) ?? null;
 
   const updateActiveSimulation = (updater: (current: Simulation) => Simulation) => {
     setApp((previous) => ({
@@ -231,16 +233,15 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
     name: string,
     options: { prepopulate: boolean } = { prepopulate: false },
   ) => {
-    if (options.prepopulate) {
-      createSimulationFromTableData(name);
-    } else {
-      const newSimulation = createSimulation(name);
-      setApp((previous) => ({
-        ...previous,
-        simulations: [newSimulation, ...previous.simulations],
-        activeSimulationId: newSimulation.id,
-      }));
-    }
+    const newSimulation = options.prepopulate
+      ? createPrepopulatedSimulation(name)
+      : createSimulation(name);
+
+    setApp((previous) => ({
+      ...previous,
+      simulations: [newSimulation, ...previous.simulations],
+      activeSimulationId: newSimulation.id,
+    }));
     setEditingDebtId(null);
     setNewSimulationOpen(false);
   };
@@ -248,6 +249,24 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
   const handleSelectSimulation = (id: string) => {
     setApp((previous) => ({ ...previous, activeSimulationId: id }));
     setEditingDebtId(null);
+  };
+
+  const handleOpenRenameSimulation = (id: string) => {
+    setRenameTargetId(id);
+  };
+
+  const handleRenameSimulation = (name: string) => {
+    if (!renameTargetId) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    setApp((previous) => ({
+      ...previous,
+      simulations: previous.simulations.map((item) =>
+        item.id === renameTargetId ? { ...item, name: trimmed } : item,
+      ),
+    }));
+    setRenameTargetId(null);
   };
 
   const handleDuplicateSimulation = () => {
@@ -387,6 +406,7 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
           simulations={app.simulations}
           activeSimulationId={simulation.id}
           onSelect={handleSelectSimulation}
+          onRename={handleOpenRenameSimulation}
           onNew={() => setNewSimulationOpen(true)}
           onDuplicate={handleDuplicateSimulation}
           onDelete={() => setDeleteSimulationOpen(true)}
@@ -442,9 +462,20 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
                   <span className="size-1.5 rounded-full bg-emerald-500" />
                   Simulação ativa
                 </p>
-                <h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl dark:text-zinc-50">
-                  {simulation.name}
-                </h1>
+                <div className="mt-1 flex min-w-0 items-center gap-2">
+                  <h1 className="truncate text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl dark:text-zinc-50">
+                    {simulation.name}
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenRenameSimulation(simulation.id)}
+                    aria-label="Editar título da simulação"
+                    title="Editar título"
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                </div>
                 <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="size-3.5" />
@@ -453,9 +484,18 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
                   <span className="text-zinc-300 dark:text-zinc-700">·</span>
                   <span>Início em {formatMonthYear(simulation.startMonth)}</span>
                   <span className="text-zinc-300 dark:text-zinc-700">·</span>
-                  <span className="inline-flex items-center gap-1">
+                  <span
+                    title={syncError ?? undefined}
+                    className={`inline-flex items-center gap-1 ${
+                      syncError ? "font-semibold text-red-600 dark:text-red-400" : ""
+                    }`}
+                  >
                     <Database className="size-3.5" />
-                    Persistido no banco
+                    {syncError
+                      ? "Erro ao salvar no banco"
+                      : saving
+                        ? "Salvando no banco..."
+                        : "Salvo no banco"}
                   </span>
                 </p>
               </div>
@@ -615,7 +655,7 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
               </p>
               <p className="inline-flex items-center gap-1.5">
                 <Database className="size-3" />
-                Neon PostgreSQL como fonte de verdade · localStorage usado apenas como cache de segurança
+                Neon PostgreSQL como fonte de verdade · nenhum dado financeiro é salvo no navegador
               </p>
             </footer>
           </main>
@@ -627,6 +667,15 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
           open
           onClose={() => setNewSimulationOpen(false)}
           onCreate={handleCreateSimulation}
+        />
+      ) : null}
+
+      {renameTarget ? (
+        <RenameSimulationDialog
+          open
+          initialName={renameTarget.name}
+          onClose={() => setRenameTargetId(null)}
+          onSave={handleRenameSimulation}
         />
       ) : null}
 
@@ -672,16 +721,38 @@ function DashboardContent({ app, setApp }: DashboardContentProps) {
   );
 }
 
-export default function Dashboard() {
-  const { value: app, setValue: setApp, hydrated } = useLocalStorageState<AppState>(
-    STORAGE_KEY,
-    createDefaultAppState,
-    { deserialize: deserializeAppState, persist: false },
+function DashboardErrorState({ message }: { message: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-zinc-50 p-6 dark:bg-zinc-950">
+      <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm dark:border-red-500/25 dark:bg-zinc-900">
+        <span className="mx-auto grid size-11 place-items-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
+          <Database className="size-5" />
+        </span>
+        <h1 className="mt-4 text-base font-semibold text-zinc-950 dark:text-zinc-50">
+          Não foi possível carregar o banco
+        </h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{message}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
   );
+}
 
-  useDatabaseSync(app, hydrated, setApp);
+export default function Dashboard() {
+  const { app, setApp, hydrated, loading, saving, error } = useDatabaseState();
 
-  if (!hydrated || !app) return <DashboardSkeleton />;
+  if (!hydrated || !app) {
+    if (!loading && error) return <DashboardErrorState message={error} />;
+    return <DashboardSkeleton />;
+  }
 
-  return <DashboardContent app={app} setApp={setApp} />;
+  return (
+    <DashboardContent app={app} setApp={setApp} saving={saving} syncError={error} />
+  );
 }

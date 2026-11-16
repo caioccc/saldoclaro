@@ -1,16 +1,12 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { THEME_KEY } from "@/lib/storage";
+import { THEME_COOKIE_NAME } from "@/lib/storage";
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const toggleTheme = () => {
     const isDark = document.documentElement.classList.toggle("dark");
-    try {
-      window.localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
-    } catch {
-      // Theme still applies for the current session.
-    }
+    document.cookie = `${THEME_COOKIE_NAME}=${isDark ? "dark" : "light"}; path=/; max-age=31536000; samesite=lax`;
   };
 
   return (
