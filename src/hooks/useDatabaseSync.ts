@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AppState, Simulation } from "@/types";
-import { parseAppState } from "@/lib/storage";
+import { parseAppState, STORAGE_KEY } from "@/lib/storage";
 
 type SetAppState = (updater: AppState | ((previous: AppState) => AppState)) => void;
-const DATABASE_MIGRATION_KEY = "capacidade-credito:database-migration:v1";
 
 function isEmptyDefaultSimulation(simulation: Simulation): boolean {
   return (
@@ -15,38 +14,58 @@ function isEmptyDefaultSimulation(simulation: Simulation): boolean {
   );
 }
 
-function mergeAppStates(local: AppState, remote: AppState, preferLocal: boolean): AppState {
-  const localIsPlaceholder =
-    local.simulations.length === 1 && isEmptyDefaultSimulation(local.simulations[0]);
+function hasLegacyData(app: AppState): boolean {
+  return !(app.simulations.length === 1 && isEmptyDefaultSimulation(app.simulations[0]));
+}
+
+function mergeLegacyWithRemote(local: AppState, remote: AppState): AppState {
   const simulations = new Map(remote.simulations.map((simulation) => [simulation.id, simulation]));
-
-  if (!localIsPlaceholder) {
-    for (const simulation of local.simulations) {
-      if (preferLocal || !simulations.has(simulation.id)) {
-        simulations.set(simulation.id, simulation);
-      }
-    }
+  for (const simulation of local.simulations) {
+    simulations.set(simulation.id, simulation);
   }
-
-  const mergedSimulations = Array.from(simulations.values());
-  const fallbackActiveSimulationId = mergedSimulations[0]?.id ?? "";
-  const localActiveSimulationId = mergedSimulations.some(
-    (simulation) => simulation.id === local.activeSimulationId,
-  )
-    ? local.activeSimulationId
-    : fallbackActiveSimulationId;
-  const remoteActiveSimulationId = mergedSimulations.some(
-    (simulation) => simulation.id === remote.activeSimulationId,
-  )
-    ? remote.activeSimulationId
-    : fallbackActiveSimulationId;
 
   return {
     version: 1,
-    simulations: mergedSimulations,
-    activeSimulationId: preferLocal ? localActiveSimulationId : remoteActiveSimulationId,
-    fees: preferLocal ? local.fees : remote.fees,
+    simulations: Array.from(simulations.values()),
+    activeSimulationId: local.activeSimulationId || remote.activeSimulationId,
+    fees: local.fees,
   };
+}
+
+async function requestDatabase(
+  method: "GET" | "POST",
+  body?: AppState,
+  signal?: AbortSignal,
+): Promise<AppState | null> {
+  const response = await fetch("/api/sync-local-data", {
+    method,
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    signal,
+  });
+
+  if (response.status === 401) {
+    window.location.reload();
+    return null;
+  }
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(result?.error ?? "Não foi possível acessar o banco de dados.");
+  }
+
+  if (method === "GET") {
+    const raw = (await response.json()) as Record<string, unknown>;
+    if (Array.isArray(raw.simulations) && raw.simulations.length === 0) {
+      return {
+        version: 1,
+        simulations: [],
+        activeSimulationId: "",
+        fees: parseAppState({ fees: raw.fees })?.fees ?? {},
+      };
+    }
+    return parseAppState(raw);
+  }
+  return null;
 }
 
 export function useDatabaseSync(
@@ -55,8 +74,8 @@ export function useDatabaseSync(
   setValue: SetAppState,
 ) {
   const initialized = useRef(false);
-  const skipSyncSignature = useRef<string | null>(null);
-  const initialSyncPayload = useRef<AppState | null>(null);
+  const migrationPayload = useRef<AppState | null>(null);
+  const lastPersistedSignature = useRef<string | null>(null);
   const [databaseReady, setDatabaseReady] = useState(false);
 
   useEffect(() => {
@@ -64,30 +83,20 @@ export function useDatabaseSync(
     initialized.current = true;
     const controller = new AbortController();
 
-    void fetch("/api/sync-local-data", { signal: controller.signal })
-      .then(async (response) => {
-        if (response.status === 401) {
-          window.location.reload();
+    void requestDatabase("GET", undefined, controller.signal)
+      .then((remote) => {
+        if (!remote) return;
+
+        if (hasLegacyData(app)) {
+          migrationPayload.current = mergeLegacyWithRemote(app, remote);
+          setDatabaseReady(true);
+          setValue(migrationPayload.current);
           return;
         }
-        if (!response.ok) throw new Error("Não foi possível carregar os dados do banco.");
 
-        const remote = parseAppState(await response.json());
-        if (remote) {
-          const migrationCompleted =
-            window.localStorage.getItem(DATABASE_MIGRATION_KEY) === "true";
-          const merged = mergeAppStates(app, remote, !migrationCompleted);
-          if (!migrationCompleted) {
-            initialSyncPayload.current = merged;
-          }
-          skipSyncSignature.current = JSON.stringify(app);
-          setDatabaseReady(true);
-          if (JSON.stringify(merged) !== JSON.stringify(app)) {
-            setValue(merged);
-          }
-        } else {
-          setDatabaseReady(true);
-        }
+        lastPersistedSignature.current = JSON.stringify(remote);
+        setDatabaseReady(true);
+        setValue(remote);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -100,35 +109,23 @@ export function useDatabaseSync(
 
   useEffect(() => {
     if (!databaseReady || !app) return;
-    const appSignature = JSON.stringify(app);
-    if (skipSyncSignature.current === appSignature && !initialSyncPayload.current) {
-      skipSyncSignature.current = null;
-      return;
-    }
-    const controller = new AbortController();
-    const payload = initialSyncPayload.current ?? app;
 
-    void fetch("/api/sync-local-data", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const result = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(result?.error ?? "A sincronização com o banco falhou.");
-        }
-        if (initialSyncPayload.current) {
-          window.localStorage.setItem(DATABASE_MIGRATION_KEY, "true");
-          initialSyncPayload.current = null;
+    const payload = migrationPayload.current ?? app;
+    const signature = JSON.stringify(payload);
+    if (!migrationPayload.current && signature === lastPersistedSignature.current) return;
+
+    const controller = new AbortController();
+    void requestDatabase("POST", payload, controller.signal)
+      .then(() => {
+        lastPersistedSignature.current = signature;
+        if (migrationPayload.current) {
+          migrationPayload.current = null;
+          window.localStorage.removeItem(STORAGE_KEY);
         }
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        console.error("Não foi possível sincronizar os dados com o banco.", error);
+        console.error("Não foi possível salvar os dados no banco.", error);
       });
 
     return () => controller.abort();

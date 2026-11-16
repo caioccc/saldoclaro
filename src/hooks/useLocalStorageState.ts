@@ -7,11 +7,13 @@ type Listener = () => void;
 
 interface Options<T> {
   deserialize?: (raw: string) => T | null;
+  persist?: boolean;
 }
 
 interface StoreEntry<T> {
   raw: string | null;
   value: T;
+  persist: boolean;
 }
 
 const entries = new Map<string, StoreEntry<unknown>>();
@@ -25,6 +27,7 @@ function hydrate<T>(
   key: string,
   createInitial: () => T,
   deserialize?: (raw: string) => T | null,
+  persist = true,
 ): T {
   const existing = entries.get(key);
   if (existing) return existing.value as T;
@@ -47,7 +50,7 @@ function hydrate<T>(
 
   try {
     const serialized = JSON.stringify(value);
-    if (serialized !== raw) {
+    if (persist && serialized !== raw) {
       window.localStorage.setItem(key, serialized);
       raw = serialized;
     }
@@ -55,7 +58,7 @@ function hydrate<T>(
     // Keep the in-memory value when storage is unavailable.
   }
 
-  entries.set(key, { raw, value: value as unknown });
+  entries.set(key, { raw, value: value as unknown, persist });
   return value;
 }
 
@@ -64,6 +67,7 @@ function subscribeToStore<T>(
   listener: Listener,
   createInitial: () => T,
   deserialize?: (raw: string) => T | null,
+  persist = true,
 ): () => void {
   let keyListeners = listeners.get(key);
   if (!keyListeners) {
@@ -73,7 +77,7 @@ function subscribeToStore<T>(
   keyListeners.add(listener);
 
   if (!entries.has(key)) {
-    hydrate(key, createInitial, deserialize);
+    hydrate(key, createInitial, deserialize, persist);
     notify(key);
   }
 
@@ -88,7 +92,7 @@ function subscribeToStore<T>(
       } else {
         const parsed = deserialize ? deserialize(raw) : (JSON.parse(raw) as T);
         if (parsed === null) return;
-        entries.set(key, { raw, value: parsed });
+        entries.set(key, { raw, value: parsed, persist });
       }
       notify(key);
     } catch {
@@ -115,12 +119,12 @@ function setStoredValue<T>(key: string, updater: Updater<T>) {
 
   try {
     raw = JSON.stringify(next);
-    window.localStorage.setItem(key, raw);
+    if (entry.persist) window.localStorage.setItem(key, raw);
   } catch {
     // Keep the in-memory value when storage is unavailable.
   }
 
-  entries.set(key, { raw, value: next });
+  entries.set(key, { raw, value: next, persist: entry.persist });
   notify(key);
 }
 
@@ -132,10 +136,11 @@ export function useLocalStorageState<T>(
   options: Options<T> = {},
 ) {
   const deserialize = options.deserialize;
+  const persist = options.persist ?? true;
 
   const subscribe = useCallback(
-    (listener: Listener) => subscribeToStore(key, listener, createInitial, deserialize),
-    [createInitial, deserialize, key],
+    (listener: Listener) => subscribeToStore(key, listener, createInitial, deserialize, persist),
+    [createInitial, deserialize, key, persist],
   );
 
   const getSnapshot = useCallback(

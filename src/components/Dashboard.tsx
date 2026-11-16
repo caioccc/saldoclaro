@@ -676,7 +676,7 @@ export default function Dashboard() {
   const { value: app, setValue: setApp, hydrated } = useLocalStorageState<AppState>(
     STORAGE_KEY,
     createDefaultAppState,
-    { deserialize: deserializeAppState },
+    { deserialize: deserializeAppState, persist: false },
   );
 
   useDatabaseSync(app, hydrated, setApp);

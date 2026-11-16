@@ -20,7 +20,7 @@ export function usePrepopulatedSimulation() {
   const { setValue, hydrated } = useLocalStorageState<AppState>(
     STORAGE_KEY,
     createDefaultAppState,
-    { deserialize: deserializeAppState },
+    { deserialize: deserializeAppState, persist: false },
   );
 
   const createSimulationFromTableData = useCallback(
